@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro PC Configurator</title>
+    <style>
+        :root {
+            --bg-body: #0f1115; --bg-card: #181b21; --bg-input: #22262e;
+            --text-main: #e6e8eb; --text-muted: #9ca3af; --accent: #3b82f6;
+            --success: #10b981; --error: #ef4444; --border: #2d333b; --radius: 8px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-body); color: var(--text-main); padding: 20px; line-height: 1.5; }
+        .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 400px; gap: 30px; }
+        @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+        
+        .panel { background: var(--bg-card); border-radius: var(--radius); padding: 25px; border: 1px solid var(--border); }
+        .panel-title { font-size: 1.2rem; font-weight: 600; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        
+        .loader { text-align: center; padding: 40px; color: var(--accent); font-weight: 600; display: none; }
+        .loader.active { display: block; }
+
+        .file-upload { margin-bottom: 20px; padding: 15px; background: var(--bg-input); border-radius: var(--radius); border: 1px dashed var(--border); text-align: center; display: none; }
+        .file-upload.visible { display: block; }
+        .file-upload input { display: none; }
+        .file-upload label { cursor: pointer; color: var(--accent); font-weight: 500; }
+
+        .server-hint { 
+            margin-bottom: 20px; padding: 15px; background: rgba(59, 130, 246, 0.1); 
+            border-radius: var(--radius); border: 1px solid var(--accent); 
+            font-size: 0.9rem; display: none;
+        }
+        .server-hint.visible { display: block; }
+        .server-hint code { background: var(--bg-input); padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+
+        .search-container { position: relative; margin-bottom: 20px; }
+        .search-input {
+            width: 100%; padding: 12px 16px; background: var(--bg-input); color: var(--text-main);
+            border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+        .search-input:focus { outline: none; border-color: var(--accent); }
+        .search-input:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .dropdown {
+            position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-card);
+            border: 1px solid var(--border); border-radius: var(--radius); margin-top: 4px;
+            max-height: 350px; overflow-y: auto; z-index: 100; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: none;
+        }
+        .dropdown.active { display: block; }
+        .dropdown-item {
+            padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center; transition: background 0.1s;
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-input); }
+        .dropdown-item .name { font-weight: 500; font-size: 0.9rem; max-width: 75%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dropdown-item .meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+        .dropdown-item .price { color: var(--accent); font-weight: 600; font-size: 0.9rem; white-space: nowrap; margin-left: 10px; }
+        .dropdown-item.incomplete { opacity: 0.5; }
+        .dropdown-item.incomplete::after { content: "⚠️ Нет данных"; font-size: 0.7rem; color: var(--error); margin-left: 8px; }
+
+        .sort-controls { display: flex; gap: 8px; margin-bottom: 8px; }
+        .sort-btn {
+            background: var(--bg-input); border: 1px solid var(--border); color: var(--text-muted);
+            padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;
+        }
+        .sort-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+        .status-box { padding: 15px; border-radius: var(--radius); margin-bottom: 20px; font-weight: 600; text-align: center; font-size: 0.95rem; }
+        .status-box.success { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); }
+        .status-box.error { background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid var(--error); text-align: left; }
+        .status-box.neutral { background: var(--bg-input); color: var(--text-muted); border: 1px solid var(--border); }
+
+        .summary-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; align-items: center; }
+        .summary-item .remove-btn { color: var(--error); cursor: pointer; margin-left: 10px; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; }
+        .summary-item .remove-btn:hover { background: rgba(239, 68, 68, 0.1); }
+        
+        .totals { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+        .total-item .label { font-size: 0.8rem; color: var(--text-muted); }
+        .total-item .value { font-size: 1.4rem; font-weight: 700; }
+        .total-item .value.tdp { color: #f59e0b; }
+    </style>
+</head>
+<body>
+
+    <h1 style="text-align: center; margin-bottom: 10px;">️ <span style="color: var(--accent)">Pro</span> Configurator</h1>
+    <p style="text-align: center; color: var(--text-muted); margin-bottom: 30px; font-size: 0.9rem;">Работает с реальным датасетом PCPartPicker (47 000+ компонентов)</p>
+
+    <div class="container">
+        <section class="panel">
+            <div class="panel-title">
+                <span>⚙️ Комплектующие</span>
+                <span id="dbStatus" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">Загрузка...</span>
+            </div>
+
+            <!-- Подсказка для запуска через сервер -->
+            <div class="server-hint" id="serverHint">
+                ️ <strong>Браузер заблокировал автоматическую загрузку файла</strong> из-за политики безопасности (CORS).<br><br>
+                <strong>Быстрое решение (10 секунд):</strong><br>
+                1. Откройте терминал в этой папке<br>
+                2. Выполните: <code>python -m http.server 8000</code><br>
+                3. Откройте в браузере: <code>http://localhost:8000</code><br><br>
+                Или загрузите файл вручную ниже ↓
+            </div>
+
+            <!-- Ручная загрузка (fallback) -->
+            <div class="file-upload" id="fileUploadArea">
+                <label for="fileInput">📂 Загрузить pcpartpicker_parts.jsonl вручную</label>
+                <input type="file" id="fileInput" accept=".jsonl,.json,.txt">
+            </div>
+
+            <div id="loader" class="loader"> Обработка и нормализация базы данных...</div>
+            <div id="categories-container" style="display: none;"></div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-title">📊 Итоговая сборка</div>
+            <div id="statusBox" class="status-box neutral">Выберите компоненты</div>
+            <div id="summaryList"></div>
+            <div class="totals">
+                <div class="total-item">
+                    <div class="label">Итоговая стоимость</div>
+                    <div class="value" id="totalPrice">0 €</div>
+                </div>
+                <div class="total-item">
+                    <div class="label">Энергопотребление (с запасом 20%)</div>
+                    <div class="value tdp" id="totalTdp">0 Вт</div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. DATA NORMALIZER & CONVERTER
+        // ==========================================
+        class DataNormalizer {
+            static cleanSocket(str) {
+                if (!str) return null;
+                return str.toUpperCase().replace(/SOCKET\s*/g, '').replace(/\s+/g, '').trim() || null;
+            }
+
+            static cleanFormFactor(str) {
+                if (!str) return 'ATX';
+                const s = str.toUpperCase();
+                if (s.includes('MICRO') || s.includes('MATX') || s.includes('M-ATX')) return 'mATX';
+                if (s.includes('MINI') || s.includes('ITX') && !s.includes('E-ATX')) return 'ITX';
+                if (s.includes('E-ATX') || s.includes('EEB')) return 'E-ATX';
+                return 'ATX';
+            }
+
+            static parseNumber(str) {
+                if (!str) return null;
+                const match = String(str).match(/(\d+)/);
+                return match ? parseInt(match[1], 10) : null;
+            }
+
+            static inferCpuSocket(name, microarchitecture) {
+                const n = (name || '').toUpperCase();
+                const arch = (microarchitecture || '').toUpperCase();
+                if (n.includes('RYZEN') || n.includes('THREADRIPPER')) {
+                    if (arch.includes('ZEN 4') || arch.includes('ZEN 5') || n.includes('7000') || n.includes('8000') || n.includes('9000')) return 'AM5';
+                    return 'AM4';
+                }
+                if (n.includes('CORE') || n.includes('PENTIUM') || n.includes('CELERON') || n.includes('XEON')) {
+                    if (arch.includes('ARROW LAKE') || n.includes('ULTRA 2')) return 'LGA1851';
+                    if (arch.includes('RAPTOR LAKE') || arch.includes('ALDER LAKE')) return 'LGA1700';
+                    if (arch.includes('ROCKET LAKE') || arch.includes('COMET LAKE') || arch.includes('KABY LAKE') || arch.includes('SKYLAKE') || arch.includes('COFFEE LAKE')) return 'LGA1151';
+                    if (arch.includes('HASWELL') || arch.includes('BROADWELL')) return 'LGA1150';
+                    if (arch.includes('SANDY BRIDGE') || arch.includes('IVY BRIDGE')) return 'LGA1155';
+                    if (arch.includes('NEHALEM') || arch.includes('WESTMERE')) return 'LGA1156';
+                }
+                return null;
+            }
+
+            static inferRamType(name, specs) {
+                const n = (name || '').toUpperCase();
+                if (n.includes('DDR5')) return 'DDR5';
+                if (n.includes('DDR4')) return 'DDR4';
+                if (n.includes('DDR3')) return 'DDR3';
+                return 'DDR4';
+            }
+
+            static inferRamModules(name) {
+                const match = String(name).match(/(\d+)\s*[xх]\s*\d+/i) || String(name).match(/\(\s*(\d+)\s*[xх]/i);
+                return match ? parseInt(match[1], 10) : 1;
+            }
+
+            static inferCaseFormFactors(name, specsFormFactor) {
+                const n = (name || '').toUpperCase();
+                const ff = (specsFormFactor || '').toUpperCase();
+                if (n.includes('MINI') || ff.includes('MINI ITX') || ff.includes('THIN MINI')) return ['ITX'];
+                if (n.includes('MICRO') || ff.includes('MICROATX')) return ['mATX', 'ITX'];
+                return ['E-ATX', 'ATX', 'mATX', 'ITX'];
+            }
+        }
+
+        function convertDatasetToConfiguratorFormat(rawData) {
+            const db = { cpu: [], motherboard: [], ram: [], gpu: [], psu: [], case: [], storage: [], cooler: [] };
+            const categoryMap = {
+                'cpu': 'cpu', 'motherboard': 'motherboard', 'video-card': 'gpu',
+                'memory': 'ram', 'power-supply': 'psu', 'case': 'case',
+                'cpu-cooler': 'cooler', 'internal-hard-drive': 'storage'
+            };
+
+            for (const item of rawData) {
+                const cat = categoryMap[item.category];
+                if (!cat) continue;
+
+                const specs = item.specs || {};
+                const name = item.name || 'Unknown';
+                const price = item.price_eur || 0;
+                let incomplete = false;
+
+                const normalized = { id: item.source_id || Math.random().toString(36), name, price, category: cat };
+
+                try {
+                    if (cat === 'cpu') {
+                        normalized.socket = DataNormalizer.cleanSocket(specs['Socket'] || specs['Socket / CPU']) || DataNormalizer.inferCpuSocket(name, specs['Microarchitecture']);
+                        normalized.tdp = DataNormalizer.parseNumber(specs['TDP']) || 65;
+                        if (!normalized.socket) incomplete = true;
+                    } 
+                    else if (cat === 'motherboard') {
+                        normalized.socket = DataNormalizer.cleanSocket(specs['Socket / CPU'] || specs['Socket']);
+                        normalized.memory_type = specs['Memory Type'] ? (specs['Memory Type'].toUpperCase().includes('DDR5') ? 'DDR5' : 'DDR4') : DataNormalizer.inferRamType(name, specs);
+                        normalized.memory_slots = DataNormalizer.parseNumber(specs['Memory Slots']) || 2;
+                        normalized.form_factor = DataNormalizer.cleanFormFactor(specs['Form Factor']);
+                        if (!normalized.socket) incomplete = true;
+                    } 
+                    else if (cat === 'ram') {
+                        normalized.memory_type = DataNormalizer.inferRamType(name, specs);
+                        normalized.modules_count = DataNormalizer.inferRamModules(name);
+                    } 
+                    else if (cat === 'gpu') {
+                        normalized.length = DataNormalizer.parseNumber(specs['Length']) || 250;
+                        normalized.tdp = DataNormalizer.parseNumber(specs['TDP']) || 150;
+                    } 
+                    else if (cat === 'case') {
+                        normalized.supported_form_factors = DataNormalizer.inferCaseFormFactors(name, specs['Form Factor']);
+                        normalized.max_gpu_length = DataNormalizer.parseNumber(specs['Maximum Video Card Length']) || 320;
+                        normalized.max_cooler_height = DataNormalizer.parseNumber(specs['Maximum CPU Cooler Height']) || 160;
+                    } 
+                    else if (cat === 'cooler') {
+                        const sockStr = specs['Socket Compatibility'] || '';
+                        normalized.supported_sockets = sockStr.split(',').map(s => DataNormalizer.cleanSocket(s)).filter(Boolean);
+                        normalized.height = DataNormalizer.parseNumber(specs['Height']) || 150;
+                        if (normalized.supported_sockets.length === 0) {
+                            normalized.supported_sockets = ['AM4', 'AM5', 'LGA1700', 'LGA1851', 'LGA1151', 'LGA1150', 'LGA1155'];
+                        }
+                    } 
+                    else if (cat === 'psu') {
+                        normalized.wattage = DataNormalizer.parseNumber(specs['Wattage']) || 500;
+                    } 
+                    else if (cat === 'storage') {
+                        normalized.interface = specs['Interface'] || (name.toUpperCase().includes('NVME') ? 'NVMe' : 'SATA');
+                        normalized.capacity_gb = DataNormalizer.parseNumber(specs['Capacity']) || 500;
+                    }
+                } catch (e) {
+                    incomplete = true;
+                }
+
+                normalized.incomplete = incomplete;
+                db[cat].push(normalized);
+            }
+
+            return db;
+        }
+
+        // ==========================================
+        // 2. COMPATIBILITY ENGINE
+        // ==========================================
+        class CompatibilityEngine {
+            static isCompatible(candidate, category, state) {
+                const s = state;
+
+                if (candidate.incomplete) {
+                    if (category === 'motherboard' && s.cpu && s.cpu.socket) return false;
+                    if (category === 'cpu' && s.motherboard && s.motherboard.socket) return false;
+                }
+
+                if (category === 'cpu' && s.motherboard && candidate.socket !== s.motherboard.socket) return false;
+                if (category === 'motherboard' && s.cpu && candidate.socket !== s.cpu.socket) return false;
+
+                if (category === 'ram' && s.motherboard) {
+                    if (candidate.memory_type !== s.motherboard.memory_type) return false;
+                    if (candidate.modules_count > s.motherboard.memory_slots) return false;
+                }
+                if (category === 'motherboard' && s.ram) {
+                    if (candidate.memory_type !== s.ram.memory_type) return false;
+                    if (s.ram.modules_count > candidate.memory_slots) return false;
+                }
+
+                if (category === 'cooler' && s.cpu) {
+                    if (!candidate.supported_sockets.includes(s.cpu.socket)) return false;
+                }
+                if (category === 'cpu' && s.cooler) {
+                    if (!s.cooler.supported_sockets.includes(candidate.socket)) return false;
+                }
+
+                if (category === 'gpu' && s.case && candidate.length > s.case.max_gpu_length) return false;
+                if (category === 'case' && s.gpu && candidate.max_gpu_length < s.gpu.length) return false;
+                
+                if (category === 'cooler' && s.case && candidate.height > s.case.max_cooler_height) return false;
+                if (category === 'case' && s.cooler && candidate.max_cooler_height < s.cooler.height) return false;
+
+                if (category === 'motherboard' && s.case) {
+                    if (!s.case.supported_form_factors.includes(candidate.form_factor)) return false;
+                }
+                if (category === 'case' && s.motherboard) {
+                    if (!candidate.supported_form_factors.includes(s.motherboard.form_factor)) return false;
+                }
+
+                if (category === 'psu' || category === 'cpu' || category === 'gpu') {
+                    const testState = { ...s, [category]: candidate };
+                    const currentTdp = this.calculateTdp(testState);
+                    const requiredWattage = Math.ceil(currentTdp * 1.2);
+                    if (s.psu && s.psu.wattage < requiredWattage) return false; 
+                    if (category === 'psu' && candidate.wattage < requiredWattage) return false; 
+                }
+
+                return true;
+            }
+
+            static calculateTdp(state) {
+                let tdp = 50;
+                if (state.cpu) tdp += (state.cpu.tdp || 65);
+                if (state.gpu) tdp += (state.gpu.tdp || 150);
+                if (state.ram) tdp += ((state.ram.modules_count || 1) * 5);
+                if (state.storage) tdp += 5;
+                return tdp;
+            }
+
+            static getAvailableItems(db, category, state, sortMode = 'price_asc') {
+                let items = db[category].filter(item => this.isCompatible(item, category, state));
+                
+                items.sort((a, b) => {
+                    if (sortMode === 'price_asc') return (a.price || 0) - (b.price || 0);
+                    if (sortMode === 'price_desc') return (b.price || 0) - (a.price || 0);
+                    if (sortMode === 'name_asc') return a.name.localeCompare(b.name);
+                    return 0;
+                });
+                return items;
+            }
+        }
+
+        // ==========================================
+        // 3. CONFIGURATOR APP
+        // ==========================================
+        class ConfiguratorApp {
+            constructor() {
+                this.db = null;
+                this.state = { cpu: null, motherboard: null, ram: null, gpu: null, cooler: null, case: null, psu: null, storage: null };
+                this.sortModes = {};
+                this.activeDropdown = null;
+                this.initLoader();
+            }
+
+            async initLoader() {
+                // Попытка 1: fetch (работает через сервер)
+                try {
+                    const response = await fetch('pcpartpicker_parts.jsonl');
+                    if (response.ok) {
+                        await this.processData(await response.text());
+                        return;
+                    }
+                } catch (e) {
+                    console.log('fetch не удался (CORS/file:// протокол)');
+                }
+
+                // Попытка 2: XMLHttpRequest (иногда работает с file://)
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', 'pcpartpicker_parts.jsonl', false); // синхронный
+                    xhr.send();
+                    if (xhr.status === 200) {
+                        await this.processData(xhr.responseText);
+                        return;
+                    }
+                } catch (e) {
+                    console.log('XHR тоже не удался');
+                }
+
+                // Если ничего не сработало — показываем подсказку и кнопку загрузки
+                document.getElementById('serverHint').classList.add('visible');
+                document.getElementById('fileUploadArea').classList.add('visible');
+                document.getElementById('dbStatus').textContent = 'Требуется загрузка файла';
+                document.getElementById('loader').classList.remove('active');
+                
+                document.getElementById('fileInput').addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    document.getElementById('serverHint').classList.remove('visible');
+                    document.getElementById('fileUploadArea').classList.remove('visible');
+                    document.getElementById('loader').classList.add('active');
+                    
+                    const text = await file.text();
+                    await this.processData(text);
+                });
+            }
+
+            async processData(text) {
+                setTimeout(() => {
+                    const lines = text.trim().split('\n').filter(line => line.trim().startsWith('{'));
+                    const rawData = lines.map(line => {
+                        try { return JSON.parse(line); } catch { return null; }
+                    }).filter(Boolean);
+
+                    this.db = convertDatasetToConfiguratorFormat(rawData);
+                    
+                    const totalItems = Object.values(this.db).reduce((acc, arr) => acc + arr.length, 0);
+                    document.getElementById('dbStatus').textContent = `Загружено: ${totalItems.toLocaleString()} компонентов`;
+                    document.getElementById('loader').classList.remove('active');
+                    document.getElementById('categories-container').style.display = 'block';
+                    
+                    this.renderCategories();
+                    this.updateSummary();
+                }, 100);
+            }
+
+            renderCategories() {
+                const container = document.getElementById('categories-container');
+                container.innerHTML = '';
+                const categoryNames = {
+                    cpu: 'Процессор (CPU)', motherboard: 'Материнская плата', ram: 'Оперативная память',
+                    gpu: 'Видеокарта', cooler: 'Кулер', case: 'Корпус', psu: 'Блок питания', storage: 'Накопитель'
+                };
+
+                for (const [key, name] of Object.entries(categoryNames)) {
+                    const div = document.createElement('div');
+                    div.className = 'search-container';
+                    div.innerHTML = `
+                        <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:6px;">${name}</label>
+                        <div class="sort-controls">
+                            <button class="sort-btn ${this.getSortMode(key) === 'price_asc' ? 'active' : ''}" onclick="app.setSort('${key}', 'price_asc')">Цена ↑</button>
+                            <button class="sort-btn ${this.getSortMode(key) === 'name_asc' ? 'active' : ''}" onclick="app.setSort('${key}', 'name_asc')">Название</button>
+                        </div>
+                        <input type="text" class="search-input" id="input-${key}" placeholder="Поиск..." autocomplete="off" ${!this.db ? 'disabled' : ''}>
+                        <div class="dropdown" id="dropdown-${key}"></div>
+                    `;
+                    container.appendChild(div);
+
+                    const input = div.querySelector(`#input-${key}`);
+                    if (this.state[key]) input.value = this.state[key].name;
+
+                    input.addEventListener('focus', () => this.openDropdown(key));
+                    input.addEventListener('input', (e) => this.openDropdown(key, e.target.value));
+                    input.addEventListener('dblclick', () => { this.selectItem(key, null); input.value = ''; });
+                }
+            }
+
+            getSortMode(category) { return this.sortModes[category] || 'price_asc'; }
+
+            setSort(category, mode) {
+                this.sortModes[category] = mode;
+                this.renderCategories();
+                if (this.state[category]) {
+                    document.getElementById(`input-${category}`).value = this.state[category].name;
+                }
+            }
+
+            openDropdown(category, query = '') {
+                this.closeAllDropdowns();
+                const dropdown = document.getElementById(`dropdown-${category}`);
+                this.activeDropdown = dropdown;
+
+                const availableItems = CompatibilityEngine.getAvailableItems(this.db, category, this.state, this.getSortMode(category));
+                const filtered = query 
+                    ? availableItems.filter(item => item.name.toLowerCase().includes(query.toLowerCase()))
+                    : availableItems;
+
+                const renderLimit = filtered.slice(0, 100);
+                
+                dropdown.innerHTML = renderLimit.map(item => `
+                    <div class="dropdown-item ${item.incomplete ? 'incomplete' : ''}" data-id="${item.id}">
+                        <div style="overflow:hidden;">
+                            <div class="name" title="${item.name}">${item.name}</div>
+                            <div class="meta">${this.getItemMeta(item, category)}</div>
+                        </div>
+                        <div class="price">${item.price ? item.price.toFixed(2) + ' €' : 'N/A'}</div>
+                    </div>
+                `).join('');
+
+                if (filtered.length === 0) {
+                    dropdown.innerHTML = '<div class="dropdown-item" style="justify-content:center; color:var(--text-muted);">Нет совместимых компонентов</div>';
+                } else if (filtered.length > 100) {
+                    dropdown.innerHTML += `<div class="dropdown-item" style="justify-content:center; color:var(--text-muted); cursor:default;">... и ещё ${filtered.length - 100}. Уточните поиск.</div>`;
+                }
+
+                dropdown.querySelectorAll('.dropdown-item:not([style*="cursor:default"])').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const itemId = el.dataset.id;
+                        const selectedItem = this.db[category].find(i => i.id === itemId);
+                        this.selectItem(category, selectedItem);
+                    });
+                });
+
+                dropdown.classList.add('active');
+            }
+
+            closeAllDropdowns() {
+                document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('active'));
+                this.activeDropdown = null;
+            }
+
+            getItemMeta(item, category) {
+                if (category === 'cpu') return `${item.socket || '???'} | ${item.tdp}W`;
+                if (category === 'motherboard') return `${item.socket || '???'} | ${item.memory_type} | ${item.form_factor}`;
+                if (category === 'ram') return `${item.memory_type} | ${item.modules_count}x планки`;
+                if (category === 'gpu') return `${item.length}мм | ${item.tdp}W`;
+                if (category === 'cooler') return `Высота: ${item.height}мм | ${item.supported_sockets.slice(0,3).join(', ')}...`;
+                if (category === 'case') return `${item.supported_form_factors.join('/')} | GPU до ${item.max_gpu_length}мм`;
+                if (category === 'psu') return `${item.wattage}W`;
+                if (category === 'storage') return `${item.interface} | ${item.capacity_gb}GB`;
+                return '';
+            }
+
+            selectItem(category, item) {
+                const oldItem = this.state[category];
+                this.state[category] = item;
+                
+                const conflicts = this.checkConflicts(category, item);
+                if (conflicts.length > 0) {
+                    conflicts.forEach(conflictCat => {
+                        this.showToast(`️ ${this.getCategoryName(conflictCat)} сброшен из-за несовместимости`);
+                        this.state[conflictCat] = null;
+                        const input = document.getElementById(`input-${conflictCat}`);
+                        if (input) input.value = '';
+                    });
+                }
+
+                const input = document.getElementById(`input-${category}`);
+                if (item) {
+                    input.value = item.name;
+                    input.classList.remove('incompatible');
+                } else {
+                    input.value = '';
+                }
+                this.closeAllDropdowns();
+                this.updateSummary();
+            }
+
+            checkConflicts(changedCategory, newItem) {
+                if (!newItem) return [];
+                const conflicts = [];
+                const otherCategories = Object.keys(this.state).filter(k => k !== changedCategory && this.state[k] !== null);
+                
+                for (const cat of otherCategories) {
+                    if (!CompatibilityEngine.isCompatible(this.state[cat], cat, { ...this.state, [changedCategory]: newItem })) {
+                        conflicts.push(cat);
+                    }
+                }
+                return conflicts;
+            }
+
+            getCategoryName(key) {
+                const names = { cpu: 'Процессор', motherboard: 'Мат. плата', ram: 'ОЗУ', gpu: 'Видеокарта', cooler: 'Кулер', case: 'Корпус', psu: 'Блок питания', storage: 'Накопитель' };
+                return names[key] || key;
+            }
+
+            showToast(message) {
+                const statusBox = document.getElementById('statusBox');
+                statusBox.className = 'status-box error';
+                statusBox.innerHTML = message;
+                setTimeout(() => { this.updateSummary(); }, 2500);
+            }
+
+            updateSummary() {
+                const summaryList = document.getElementById('summaryList');
+                const statusBox = document.getElementById('statusBox');
+                let totalPrice = 0;
+                let html = '';
+
+                for (const [key, item] of Object.entries(this.state)) {
+                    if (item) {
+                        totalPrice += (item.price || 0);
+                        html += `
+                            <div class="summary-item">
+                                <span>${this.getCategoryName(key)}: <strong>${item.name}</strong></span>
+                                <span>
+                                    ${item.price ? item.price.toFixed(2) + ' €' : 'N/A'}
+                                    <span class="remove-btn" onclick="app.selectItem('${key}', null)"></span>
+                                </span>
+                            </div>
+                        `;
+                    }
+                }
+
+                summaryList.innerHTML = html || '<div style="text-align:center; color:var(--text-muted); padding:20px;">Список пуст</div>';
+                document.getElementById('totalPrice').textContent = totalPrice.toFixed(2) + ' €';
+                
+                const tdp = CompatibilityEngine.calculateTdp(this.state);
+                const requiredPsu = Math.ceil(tdp * 1.2);
+                document.getElementById('totalTdp').textContent = `${tdp} Вт (БП от ${requiredPsu} Вт)`;
+
+                const errors = this.validateFullState();
+                if (errors.length > 0) {
+                    statusBox.className = 'status-box error';
+                    statusBox.innerHTML = '❌ Проблемы:<br>' + errors.map(e => `• ${e}`).join('<br>');
+                } else if (Object.values(this.state).filter(v => v !== null).length === 8) {
+                    statusBox.className = 'status-box success';
+                    statusBox.textContent = '✅ Сборка полностью совместима!';
+                } else {
+                    statusBox.className = 'status-box neutral';
+                    statusBox.textContent = 'Выберите компоненты для проверки совместимости';
+                }
+            }
+
+            validateFullState() {
+                const errors = [];
+                const s = this.state;
+                if (!s.cpu || !s.motherboard) return errors;
+
+                if (s.cpu.socket && s.motherboard.socket && s.cpu.socket !== s.motherboard.socket) 
+                    errors.push(`Сокет CPU (${s.cpu.socket}) ≠ Мат. плата (${s.motherboard.socket})`);
+                if (s.ram && s.motherboard && s.ram.memory_type !== s.motherboard.memory_type) 
+                    errors.push(`Тип памяти ОЗУ (${s.ram.memory_type}) не поддерживается платой`);
+                if (s.cooler && s.cpu && s.cpu.socket && !s.cooler.supported_sockets.includes(s.cpu.socket)) 
+                    errors.push(`Кулер не поддерживает сокет ${s.cpu.socket}`);
+                if (s.gpu && s.case && s.gpu.length > s.case.max_gpu_length) 
+                    errors.push(`Видеокарта (${s.gpu.length}мм) > макс. длина корпуса (${s.case.max_gpu_length}мм)`);
+                if (s.motherboard && s.case && !s.case.supported_form_factors.includes(s.motherboard.form_factor)) 
+                    errors.push(`Форм-фактор платы (${s.motherboard.form_factor}) не поддерживается корпусом`);
+                
+                const tdp = CompatibilityEngine.calculateTdp(s);
+                if (s.psu && s.psu.wattage < Math.ceil(tdp * 1.2)) {
+                    errors.push(`Мощность БП (${s.psu.wattage}W) недостаточна для ~${tdp}W (требуется от ${Math.ceil(tdp * 1.2)}W)`);
+                }
+
+                return errors;
+            }
+        }
+
+        const app = new ConfiguratorApp();
+        
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-container')) {
+                app.closeAllDropdowns();
+            }
+        });
+    </script>
+</body>
+</html>
